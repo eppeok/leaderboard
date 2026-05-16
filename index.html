@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Leaderboard — EppeOK</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#06090f;--card:#0c1220;--border:#1a2840;
+  --text:#e2e8f0;--dim:#64748b;--sub:#94a3b8;
+  --blue:#3b82f6;--green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--purple:#a78bfa;--amber:#e2b714;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
+#stars{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--d,3s) var(--delay,0s) infinite alternate}
+@keyframes twinkle{from{opacity:.1}to{opacity:.6}}
+
+nav{position:sticky;top:0;z-index:100;background:#06090fee;backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;gap:10px;height:56px}
+.nav-back{font-size:.8rem;font-weight:700;color:var(--dim);text-decoration:none;padding:5px 12px;border:1px solid var(--border);border-radius:20px;transition:color .2s}
+.nav-back:hover{color:var(--text)}
+.nav-title{font-size:1.1rem;font-weight:900;color:var(--yellow);margin-right:auto}
+
+.page{position:relative;z-index:1;max-width:800px;margin:0 auto;padding:40px 20px}
+.page-header{text-align:center;margin-bottom:40px}
+.page-header h1{font-size:2.2rem;font-weight:900;margin-bottom:8px}
+.page-header p{color:var(--sub)}
+
+/* TABS */
+.tabs{display:flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:50px;padding:5px;margin-bottom:32px;width:fit-content;margin-left:auto;margin-right:auto}
+.tab{padding:8px 22px;border-radius:50px;border:none;background:transparent;color:var(--dim);font-weight:700;font-size:.88rem;cursor:pointer;transition:all .2s;white-space:nowrap}
+.tab.active{color:#000;font-weight:800}
+.tab.t-typing.active{background:var(--amber)}
+.tab.t-math.active{background:var(--green)}
+.tab.t-quiz.active{background:var(--purple)}
+
+/* BOARD */
+.board{background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden}
+.board-header{display:flex;padding:14px 20px;border-bottom:1px solid var(--border);font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+.bh-rank{width:40px}
+.bh-name{flex:1}
+.bh-score{width:100px;text-align:right}
+.bh-extra{width:120px;text-align:right}
+
+.board-row{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);transition:background .2s;animation:fadeIn .3s ease-out both}
+.board-row:last-child{border-bottom:none}
+.board-row:hover{background:#0a0e18}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+.row-rank{width:40px;font-size:1.1rem;font-weight:800;flex-shrink:0}
+.row-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.85rem;flex-shrink:0;margin-right:12px}
+.row-name{flex:1;font-weight:700;font-size:.95rem}
+.row-sub{font-size:.72rem;color:var(--dim);margin-top:2px}
+.row-score{width:100px;text-align:right;font-weight:900;font-size:1rem}
+.row-extra{width:120px;text-align:right;font-size:.78rem;color:var(--dim)}
+
+.top1{background:linear-gradient(90deg,#1a140000,#2a200010)}
+.top2{background:linear-gradient(90deg,#18181800,#2a2a2a10)}
+.top3{background:linear-gradient(90deg,#1a100000,#2a180010)}
+
+.loading{text-align:center;padding:48px;color:var(--dim);font-size:.95rem}
+.empty{text-align:center;padding:48px;color:var(--dim)}
+.empty-icon{font-size:3rem;margin-bottom:12px}
+
+/* Filter row */
+.filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;justify-content:center}
+.filter-btn{padding:6px 16px;border-radius:20px;border:2px solid var(--border);background:transparent;color:var(--sub);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .2s}
+.filter-btn.active{border-color:var(--yellow);background:#2a1f00;color:var(--yellow)}
+.filter-btn.green-filter.active{border-color:var(--green);background:#0a1f10;color:var(--green)}
+
+/* Personal best highlight */
+.row-you{border-left:3px solid var(--blue)}
+
+.refresh-btn{display:flex;align-items:center;gap:6px;margin:0 auto;padding:8px 20px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);font-size:.8rem;font-weight:700;cursor:pointer;transition:all .2s;margin-top:16px}
+.refresh-btn:hover{color:var(--text);border-color:var(--text)}
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<nav>
+  <a href="https://eppeok.github.io" class="nav-back">← All Tools</a>
+  <div class="nav-title">🏆 Leaderboard</div>
+  <a href="https://eppeok.github.io/student-dashboard/" class="nav-back">Dashboard</a>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <h1>🏆 All-Time Rankings</h1>
+    <p>Top scores across every tool — updated live.</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab t-typing active" onclick="switchTab('typing')">⌨️ TypeBlitz</button>
+    <button class="tab t-math" onclick="switchTab('math')">➕ MathDrill</button>
+    <button class="tab t-quiz" onclick="switchTab('quiz')">⚡ QuizBlitz</button>
+  </div>
+
+  <!-- TYPING TAB -->
+  <div id="tab-typing">
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="setTypingFilter('all',this)">All Modes</button>
+      <button class="filter-btn" onclick="setTypingFilter('time',this)">⏱ Time</button>
+      <button class="filter-btn" onclick="setTypingFilter('words',this)">📝 Words</button>
+      <button class="filter-btn" onclick="setTypingFilter('quote',this)">💬 Quote</button>
+    </div>
+    <div class="board" id="typing-board">
+      <div class="loading">Loading...</div>
+    </div>
+  </div>
+
+  <!-- MATH TAB -->
+  <div id="tab-math" style="display:none">
+    <div class="filter-row" id="math-filters">
+      <button class="filter-btn green-filter active" onclick="setMathFilter('all',this)">All</button>
+      <button class="filter-btn green-filter" onclick="setMathFilter('x',this)">× Multiply</button>
+      <button class="filter-btn green-filter" onclick="setMathFilter('x00f7',this)">÷ Divide</button>
+      <button class="filter-btn green-filter" onclick="setMathFilter('+',this)">+ Add</button>
+      <button class="filter-btn green-filter" onclick="setMathFilter('x2212',this)">− Subtract</button>
+    </div>
+    <div class="board" id="math-board">
+      <div class="loading">Loading...</div>
+    </div>
+  </div>
+
+  <!-- QUIZ TAB -->
+  <div id="tab-quiz" style="display:none">
+    <div class="board" id="quiz-board">
+      <div class="loading">Loading...</div>
+    </div>
+  </div>
+
+  <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+</div>
+
+<script>
+let db;
+try{
+  if(!firebase.apps.length){
+    firebase.initializeApp({
+      apiKey:"AIzaSyAfflbNLrrn95tPvLW0bzR8Q4iAqOKUOrM",
+      authDomain:"sdvb-d16b2.firebaseapp.com",
+      databaseURL:"https://sdvb-d16b2-default-rtdb.firebaseio.com",
+      projectId:"sdvb-d16b2",
+      storageBucket:"sdvb-d16b2.firebasestorage.app",
+      messagingSenderId:"1007920126855",
+      appId:"1:1007920126855:web:4d5fd1d73d311bd694d122"
+    });
+  }
+  db=firebase.database();
+}catch(e){console.warn('Firebase',e);}
+
+(()=>{const c=document.getElementById('stars');for(let i=0;i<100;i++){const s=document.createElement('div');s.className='star';const sz=Math.random()*2.5+1;s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${2+Math.random()*4}s;--delay:${Math.random()*4}s;opacity:${Math.random()*.5+.1}`;c.appendChild(s);}})();
+
+let currentTab='typing';
+let typingFilter='all';
+let mathFilter='all';
+let allTypingScores=[];
+let allMathScores=[];
+let allQuizScores=[];
+
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function colorFromName(n){
+  const colors=['#3b82f6','#22c55e','#f59e0b','#ec4899','#a78bfa','#22d3ee','#ef4444','#f97316'];
+  let h=0; for(let i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))&0xffff;
+  return colors[h%colors.length];
+}
+
+function switchTab(t){
+  currentTab=t;
+  ['typing','math','quiz'].forEach(x=>{
+    document.getElementById('tab-'+x).style.display=x===t?'block':'none';
+    document.querySelector('.tab.t-'+x).classList.toggle('active',x===t);
+  });
+}
+
+function setTypingFilter(f,el){
+  typingFilter=f;
+  document.querySelectorAll('#tab-typing .filter-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderTyping();
+}
+
+function setMathFilter(f,el){
+  mathFilter=f;
+  document.querySelectorAll('#math-filters .filter-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderMath();
+}
+
+const medals=['🥇','🥈','🥉'];
+function rankStr(i){ return medals[i]||`#${i+1}`; }
+
+// ── TYPING ──
+async function loadTyping(){
+  const board=document.getElementById('typing-board');
+  board.innerHTML='<div class="loading">Loading...</div>';
+  if(!db){board.innerHTML='<div class="empty"><div class="empty-icon">📡</div>Leaderboard offline</div>';return;}
+  try{
+    const snap=await db.ref('typeblitz/scores').orderByChild('wpm').limitToLast(100).once('value');
+    allTypingScores=[];
+    snap.forEach(c=>allTypingScores.unshift(c.val()));
+    renderTyping();
+  }catch(e){board.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div>Could not load scores</div>';}
+}
+
+function renderTyping(){
+  const board=document.getElementById('typing-board');
+  let rows=allTypingScores;
+  if(typingFilter!=='all') rows=rows.filter(r=>r.mode===typingFilter);
+  rows=rows.slice(0,25);
+  if(!rows.length){board.innerHTML='<div class="empty"><div class="empty-icon">⌨️</div>No scores yet — be the first!</div>';return;}
+  board.innerHTML=`
+    <div class="board-header">
+      <div class="bh-rank">#</div>
+      <div class="bh-name">Player</div>
+      <div class="bh-score">WPM</div>
+      <div class="bh-extra">Accuracy</div>
+    </div>
+    ${rows.map((r,i)=>{
+      const col=colorFromName(r.name||'?');
+      return `<div class="board-row${i<3?' top'+(i+1):''}">
+        <div class="row-rank">${rankStr(i)}</div>
+        <div class="row-avatar" style="background:${col}22;color:${col};border:1px solid ${col}44">${(r.name||'?')[0].toUpperCase()}</div>
+        <div class="row-name">${escHtml(r.name||'Anonymous')}<div class="row-sub">${r.mode||'time'} · ${r.chars||0} chars</div></div>
+        <div class="row-score" style="color:var(--amber)">${Math.round(r.wpm||0)} <span style="font-size:.65rem;font-weight:600;color:var(--dim)">WPM</span></div>
+        <div class="row-extra">${Math.round(r.accuracy||0)}%</div>
+      </div>`;
+    }).join('')}`;
+}
+
+// ── MATH ──
+async function loadMath(){
+  const board=document.getElementById('math-board');
+  board.innerHTML='<div class="loading">Loading...</div>';
+  if(!db){board.innerHTML='<div class="empty"><div class="empty-icon">📡</div>Leaderboard offline</div>';return;}
+  try{
+    const snap=await db.ref('mathdrill/scores').once('value');
+    allMathScores=[];
+    const val=snap.val()||{};
+    // Flatten all op_range buckets
+    Object.entries(val).forEach(([key,bucket])=>{
+      Object.values(bucket||{}).forEach(r=>allMathScores.push({...r,key}));
+    });
+    allMathScores.sort((a,b)=>(b.score||0)-(a.score||0));
+    renderMath();
+  }catch(e){board.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div>Could not load scores</div>';}
+}
+
+function renderMath(){
+  const board=document.getElementById('math-board');
+  let rows=allMathScores;
+  if(mathFilter!=='all') rows=rows.filter(r=>(r.key||'').startsWith(mathFilter));
+  rows=rows.slice(0,25);
+  if(!rows.length){board.innerHTML='<div class="empty"><div class="empty-icon">➕</div>No scores yet — be the first!</div>';return;}
+  board.innerHTML=`
+    <div class="board-header">
+      <div class="bh-rank">#</div>
+      <div class="bh-name">Player</div>
+      <div class="bh-score">Score</div>
+      <div class="bh-extra">Accuracy</div>
+    </div>
+    ${rows.map((r,i)=>{
+      const col=colorFromName(r.name||'?');
+      return `<div class="board-row${i<3?' top'+(i+1):''}">
+        <div class="row-rank">${rankStr(i)}</div>
+        <div class="row-avatar" style="background:${col}22;color:${col};border:1px solid ${col}44">${(r.name||'?')[0].toUpperCase()}</div>
+        <div class="row-name">${escHtml(r.name||'Anonymous')}<div class="row-sub">${r.op||''} 1–${r.range||'?'} · ${r.total||0} Qs</div></div>
+        <div class="row-score" style="color:var(--green)">${r.score||0}</div>
+        <div class="row-extra">${r.accuracy||0}%</div>
+      </div>`;
+    }).join('')}`;
+}
+
+// ── QUIZ ──
+async function loadQuiz(){
+  const board=document.getElementById('quiz-board');
+  board.innerHTML='<div class="loading">Loading...</div>';
+  if(!db){board.innerHTML='<div class="empty"><div class="empty-icon">📡</div>Leaderboard offline</div>';return;}
+  try{
+    // Pull last 50 completed QuizBlitz games, find top individual scores
+    const snap=await db.ref('quizblitz').orderByChild('status').equalTo('ended').limitToLast(50).once('value');
+    const playerBests={};
+    snap.forEach(gameSnap=>{
+      const game=gameSnap.val();
+      const players=game.players||{};
+      Object.entries(players).forEach(([name,p])=>{
+        const score=p.score||0;
+        if(!playerBests[name]||score>playerBests[name].score){
+          playerBests[name]={name,score,mode:game.mode||'classic',pack:game.pack||'gk'};
+        }
+      });
+    });
+    allQuizScores=Object.values(playerBests).sort((a,b)=>b.score-a.score).slice(0,25);
+    renderQuiz();
+  }catch(e){board.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div>Could not load scores</div>';}
+}
+
+function renderQuiz(){
+  const board=document.getElementById('quiz-board');
+  if(!allQuizScores.length){board.innerHTML='<div class="empty"><div class="empty-icon">⚡</div>No scores yet — play QuizBlitz!</div>';return;}
+  board.innerHTML=`
+    <div class="board-header">
+      <div class="bh-rank">#</div>
+      <div class="bh-name">Player</div>
+      <div class="bh-score">Best Score</div>
+      <div class="bh-extra">Mode</div>
+    </div>
+    ${allQuizScores.map((r,i)=>{
+      const col=colorFromName(r.name||'?');
+      const modeEmoji={classic:'🏆',goldrush:'💰',survival:'❤️',streak:'🔥'}[r.mode]||'⚡';
+      return `<div class="board-row${i<3?' top'+(i+1):''}">
+        <div class="row-rank">${rankStr(i)}</div>
+        <div class="row-avatar" style="background:${col}22;color:${col};border:1px solid ${col}44">${(r.name||'?')[0].toUpperCase()}</div>
+        <div class="row-name">${escHtml(r.name||'Anonymous')}<div class="row-sub">${r.pack||'gk'}</div></div>
+        <div class="row-score" style="color:var(--purple)">${(r.score||0).toLocaleString()}</div>
+        <div class="row-extra">${modeEmoji} ${r.mode||'classic'}</div>
+      </div>`;
+    }).join('')}`;
+}
+
+function loadAll(){ loadTyping(); loadMath(); loadQuiz(); }
+loadAll();
+</script>
+</body>
+</html>
